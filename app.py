@@ -2,16 +2,17 @@
 import streamlit as st
 import pandas as pd
 import joblib
-from fpdf import FPDF
-import tempfile
 
 # Загрузка модели и препроцессора
 model = joblib.load("postop_model_logreg.pkl")
 preprocessor = joblib.load("postop_preprocessor.pkl")
 
+# Отображение логотипа
 st.image("icon.png", width=72)
+
 st.title("Прогноз осложнений после бариатрической хирургии")
 
+# Описание признаков и их ожидаемых типов
 expected_features = {
     "Наличие рвоты после операции": "object",
     "Абдоминальная боль, ВАШ": "float",
@@ -35,6 +36,7 @@ with st.form("input_form"):
     submitted = st.form_submit_button("Рассчитать риск")
 
 if submitted:
+    # Подготовка входных данных
     raw_input = {
         "Наличие рвоты после операции": vomit,
         "Абдоминальная боль, ВАШ": pain,
@@ -46,6 +48,7 @@ if submitted:
         "Д-димер, нг/мл": dd
     }
 
+    # Создаём датафрейм в нужном порядке и с нужными типами
     prepared = {}
     for feature, dtype in expected_features.items():
         val = raw_input.get(feature)
@@ -59,6 +62,7 @@ if submitted:
 
     df = pd.DataFrame([prepared])[list(expected_features.keys())]
 
+    # Предсказание
     try:
         X = preprocessor.transform(df)
         prob = model.predict_proba(X)[0][1]
@@ -67,30 +71,5 @@ if submitted:
             st.error("⚠️ Высокий риск осложнений. Требуется наблюдение.")
         else:
             st.success("✅ Низкий риск осложнений.")
-
-        # Генерация PDF
-        pdf = FPDF()
-        pdf.add_page()
-        pdf.add_font("Arial", "", fname="/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", uni=True)
-        pdf.set_font("Arial", "", 12)
-        pdf.cell(200, 10, "Результаты прогнозирования", ln=True, align="C")
-        pdf.ln(5)
-
-        for k, v in prepared.items():
-            pdf.cell(0, 10, f"{k}: {v}", ln=True)
-
-        pdf.ln(5)
-        pdf.set_text_color(200, 0, 0) if prob >= 0.5 else pdf.set_text_color(0, 100, 0)
-        pdf.set_font("Arial", "B", 12)
-        pdf.cell(0, 10, f"Риск осложнений: {prob:.2%}", ln=True)
-
-        # Временный файл
-        tmpfile = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
-        pdf.output(tmpfile.name)
-        tmpfile.flush()
-
-        with open(tmpfile.name, "rb") as f:
-            st.download_button("📄 Скачать результат в PDF", data=f, file_name="результат_прогноза.pdf")
-
     except Exception as e:
         st.exception(e)
