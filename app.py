@@ -7,13 +7,22 @@ import joblib
 model = joblib.load("postop_model_logreg.pkl")
 preprocessor = joblib.load("postop_preprocessor.pkl")
 
-# Определяем порядок признаков, соответствующих обучению модели
-expected_features = [
-    "Наличие рвоты после операции", "Абдоминальная боль, ВАШ", "Темп", "ЧСС, уд/мин",
-    "Лейкоциты 1", "Гемоглобин 1", "СРБ, мг/л", "Д-димер, нг/мл"
-]
+# Отображение логотипа
+st.image("icon.png", width=72)
 
-st.title("Риск послеоперационных осложнений (бариатрия)")
+st.title("Прогноз осложнений после бариатрической хирургии")
+
+# Описание признаков и их ожидаемых типов
+expected_features = {
+    "Наличие рвоты после операции": "object",
+    "Абдоминальная боль, ВАШ": "float",
+    "Темп": "float",
+    "ЧСС, уд/мин": "float",
+    "Лейкоциты 1": "float",
+    "Гемоглобин 1": "float",
+    "СРБ, мг/л": "float",
+    "Д-димер, нг/мл": "float"
+}
 
 with st.form("input_form"):
     vomit = st.selectbox("Рвота после операции", ["нет", "да"])
@@ -27,7 +36,8 @@ with st.form("input_form"):
     submitted = st.form_submit_button("Рассчитать риск")
 
 if submitted:
-    input_data = {
+    # Подготовка входных данных
+    raw_input = {
         "Наличие рвоты после операции": vomit,
         "Абдоминальная боль, ВАШ": pain,
         "Темп": temp,
@@ -38,21 +48,28 @@ if submitted:
         "Д-димер, нг/мл": dd
     }
 
-    # Создаём датафрейм с теми же столбцами, что и при обучении
-    df = pd.DataFrame([input_data])
+    # Создаём датафрейм в нужном порядке и с нужными типами
+    prepared = {}
+    for feature, dtype in expected_features.items():
+        val = raw_input.get(feature)
+        if dtype == "object":
+            prepared[feature] = str(val) if val is not None else ""
+        else:
+            try:
+                prepared[feature] = float(val)
+            except:
+                prepared[feature] = 0.0
 
-    # Гарантируем, что порядок и названия признаков сохранены
-    for col in expected_features:
-        if col not in df.columns:
-            df[col] = None
-    df = df[expected_features]
+    df = pd.DataFrame([prepared])[list(expected_features.keys())]
 
     # Предсказание
-    X = preprocessor.transform(df)
-    prob = model.predict_proba(X)[0][1]
-
-    st.markdown(f"### Вероятность осложнений: {prob:.2%}")
-    if prob >= 0.5:
-        st.error("⚠️ Высокий риск осложнений. Рекомендуется наблюдение.")
-    else:
-        st.success("✅ Риск осложнений низкий.")
+    try:
+        X = preprocessor.transform(df)
+        prob = model.predict_proba(X)[0][1]
+        st.markdown(f"### Вероятность осложнений: {prob:.2%}")
+        if prob >= 0.5:
+            st.error("⚠️ Высокий риск осложнений. Требуется наблюдение.")
+        else:
+            st.success("✅ Низкий риск осложнений.")
+    except Exception as e:
+        st.exception(e)
